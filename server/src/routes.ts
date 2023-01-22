@@ -82,12 +82,13 @@ export async function appRoutes(app: FastifyInstance) {
 
     const today = dayjs().startOf("day").toDate();
 
+    //procurar no prisma onde a data seja igual a data de hoje
     let day = await prisma.day.findUnique({
       where: {
         date: today,
       },
     });
-
+    // se não achar, cria a informaçao no banco
     if (!day) {
       day = await prisma.day.create({
         data: {
@@ -120,5 +121,33 @@ export async function appRoutes(app: FastifyInstance) {
         },
       });
     }
+  });
+
+  app.get("/summary", async () => {
+    //SQLite
+    const summary = await prisma.$queryRaw`
+      SELECT 
+        D.id, 
+        D.date,
+        (
+          SELECT
+            cast(count(*) as float)
+          FROM day_habits DH
+          WHERE DH.day_id = D.id
+        ) as completed,
+        (
+          SELECT
+            cast(count(*) as float)
+          FROM habit_week_days HWD
+          JOIN habits H
+            ON H.id = HWD.habit_id
+          WHERE 
+            HWD.week_day = cast(strftime('%w', D.date/1000.0, 'unixepoch') as int)
+            AND H.created_at <= D.date
+        ) as amount
+      FROM days D
+    `;
+
+    return summary;
   });
 }
